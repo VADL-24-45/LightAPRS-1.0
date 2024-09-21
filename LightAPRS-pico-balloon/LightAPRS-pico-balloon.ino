@@ -91,6 +91,12 @@ const int monthDays[12] = {31, 28, 31, 30, 31, 30,
 TinyGPSPlus gps;
 Adafruit_BMP085 bmp;
 
+
+/**
+ * Initializes the hardware pins and sets up APRS (Automatic Packet Reporting System).
+ * Configures GPS, RF modules, power modes, and sensors for use with the tracker.
+ * This function runs once on startup.
+ */
 void setup() {
   wdt_enable(WDTO_8S);
   analogReference(INTERNAL2V56);
@@ -128,6 +134,11 @@ void setup() {
   bmp.begin();
 }
 
+/**
+ * Main execution loop that runs repeatedly.
+ * Checks battery levels, GPS data, and sends location/telemetry data when available.
+ * Also manages APRS transmission intervals and handles sleep modes to conserve power.
+ */
 void loop() {
    wdt_reset();
   
@@ -209,10 +220,23 @@ void loop() {
   
 }
 
+/**
+ * Callback function required by the LibAPRS library.
+ * This function is a placeholder for handling incoming APRS messages, but is currently unused.
+ *
+ * @param msg  Pointer to the AX25 message structure.
+ */
 void aprs_msg_callback(struct AX25Msg *msg) {
   //do not remove this function, necessary for LibAPRS
 }
 
+/**
+ * Puts the system to sleep for a specified number of seconds.
+ * Turns off the GPS and RF modules, and disables the watchdog timer to conserve power.
+ * Reactivates the watchdog timer after the sleep period.
+ *
+ * @param sec  Number of seconds to sleep.
+ */
 void sleepSeconds(int sec) {  
   if (GpsFirstFix){//sleep gps after first fix
       GpsOFF;
@@ -232,7 +256,12 @@ void sleepSeconds(int sec) {
    wdt_enable(WDTO_8S);
 }
 
-
+/**
+ * Determines if airborne APRS transmissions are allowed based on the current GPS location.
+ * Uses a geofencing system to check if APRS transmission is permitted.
+ *
+ * @return  True if APRS transmission is allowed, false otherwise.
+ */
 boolean isAirborneAPRSAllowed() {
 
   float tempLat = gps.location.lat();
@@ -249,7 +278,14 @@ boolean isAirborneAPRSAllowed() {
   return airborne;
 }
 
-
+/**
+ * Checks if the current GPS location falls within the ARISS geofence.
+ * The ARISS geofence covers specific regions where APRS can be routed via the International Space Station.
+ *
+ * @param tempLat  Current latitude.
+ * @param tempLong Current longitude.
+ * @return         True if inside the ARISS geofence, false otherwise.
+ */
 boolean inARISSGeoFence(float tempLat, float tempLong) {
 
 
@@ -264,7 +300,11 @@ boolean inARISSGeoFence(float tempLat, float tempLong) {
   return ariss;
 }
 
-
+/**
+ * Configures the APRS transmission frequency based on the current GPS location.
+ * If the location is within the ARISS geofence, it sets the frequency to communicate via ARISS.
+ * Otherwise, it uses the standard APRS frequency based on geofencing data.
+ */
 void configureFreqbyLocation() {
 
   float tempLat = gps.location.lat();
@@ -290,7 +330,13 @@ void configureFreqbyLocation() {
   radioSetup = true;
 }
 
-
+/**
+ * Configures the DRA818 radio module to transmit at the specified frequency.
+ * Communicates with the module via SoftwareSerial and applies the frequency settings.
+ *
+ * @param freq  Frequency string to set for the radio module.
+ * @return      1 if the configuration was successful, 0 otherwise.
+ */
 byte configDra818(char *freq)
 {
   SoftwareSerial Serial_dra(PIN_DRA_RX, PIN_DRA_TX);
@@ -320,6 +366,11 @@ byte configDra818(char *freq)
   return (ack[0] == 0x30) ? 1 : 0;
 }
 
+
+/**
+ * Updates the GPS position in APRS format and sets the latitude and longitude.
+ * Converts the latitude and longitude from degrees to NMEA format.
+ */
 void updatePosition() {
   // Convert and set latitude NMEA string Degree Minute Hundreths of minutes ddmm.hh[S,N].
   char latStr[10];
@@ -381,7 +432,10 @@ void updatePosition() {
   APRS_setLon(lonStr);
 }
 
-
+/**
+ * Collects telemetry data including course, speed, altitude, and satellite count.
+ * Formats this data for APRS transmission along with temperature, pressure, and battery voltage.
+ */
 void updateTelemetry() {
  
   sprintf(telemetry_buff, "%03d", gps.course.isValid() ? (int)gps.course.deg() : 0);
@@ -432,7 +486,10 @@ void updateTelemetry() {
 
 }
 
-
+/**
+ * Sends the current GPS location along with telemetry data via APRS.
+ * Determines transmission power based on the battery voltage and sends the location with a timestamp.
+ */
 void sendLocation() {
 
 #if defined(DEVMODE)
@@ -472,6 +529,11 @@ void sendLocation() {
   TxCount++;
 }
 
+/**
+ * Sends a status message via APRS.
+ * The message includes information such as the day of the balloon launch and a predefined status message.
+ * Also updates the EEPROM with the launch date on the first transmission.
+ */
 void sendStatus() {
   if ((readBatt() > DraHighVolt) && (readBatt() < 10)) RfPwrHigh; //DRA Power 1 Watt
   else RfPwrLow; //DRA Power 0.5 Watt
@@ -541,6 +603,12 @@ void sendStatus() {
 
 }
 
+/**
+ * Counts the number of leap years before the given date.
+ *
+ * @param d  Date structure containing the day, month, and year.
+ * @return   Number of leap years before the given date.
+ */
 int countLeapYears(Date d) 
 { 
     int years = d.y; 
@@ -554,7 +622,14 @@ int countLeapYears(Date d)
     // multiple of 400 and not a multiple of 100. 
     return years / 4 - years / 100 + years / 400; 
 } 
-  
+
+/**
+ * Calculates the number of days between two dates.
+ *
+ * @param dt1  The first date.
+ * @param dt2  The second date.
+ * @return     The difference in days between the two dates.
+ */
 int getDifference(Date dt1, Date dt2) 
 { 
     // COUNT TOTAL NUMBER OF DAYS BEFORE FIRST DATE 'dt1' 
@@ -581,7 +656,12 @@ int getDifference(Date dt1, Date dt2)
     return (n2 - n1); 
 } 
 
-
+/**
+ * Updates the GPS data by reading from the GPS module for a specified duration.
+ * Reads GPS data in NMEA format and encodes it into a TinyGPS++ object.
+ *
+ * @param ms  Number of milliseconds to read from the GPS module.
+ */
 static void updateGpsData(int ms)
 {
   GpsON;
@@ -615,6 +695,13 @@ static void updateGpsData(int ms)
 
 }
 
+
+/**
+ * Reads the current battery voltage by sampling the analog input pin.
+ * Returns the voltage after scaling based on a resistor divider network.
+ *
+ * @return  The battery voltage in volts.
+ */
 float readBatt() {
   float R1 = 560000.0; // 560K
   float R2 = 100000.0; // 100K
@@ -630,12 +717,22 @@ float readBatt() {
   return value ;
 }
 
+
+/**
+ * Prints the free memory available in the system.
+ * Only active when DEVMODE is enabled for debugging purposes.
+ */
 void freeMem() {
 #if defined(DEVMODE)
   Serial.print(F("Free RAM: ")); Serial.print(freeMemory()); Serial.println(F(" byte"));
 #endif
 }
 
+
+/**
+ * Prints GPS debugging information such as satellite count, position, and speed.
+ * Only active when DEVMODE is enabled for debugging purposes.
+ */
 void gpsDebug() {
 #if defined(DEVMODE)
   Serial.println();
@@ -737,6 +834,10 @@ static void printStr(const char *str, int len)
 #endif
 }
 
+/**
+ * Sets the GPS dynamic model to mode 6, which is suitable for high-altitude operations.
+ * Sends UBX commands to the GPS module and ensures successful configuration.
+ */
 //following GPS code from : https://github.com/HABduino/HABduino/blob/master/Software/habduino_v4/habduino_v4.ino
 void setGPS_DynamicModel6()
 {
@@ -755,6 +856,12 @@ void setGPS_DynamicModel6()
  }
 }
 
+/**
+ * Sends a UBX protocol message to the GPS module via Serial1.
+ *
+ * @param MSG  The UBX message to be sent.
+ * @param len  Length of the UBX message.
+ */
 void sendUBX(uint8_t *MSG, uint8_t len) {
  Serial1.flush();
  Serial1.write(0xFF);
@@ -763,6 +870,14 @@ void sendUBX(uint8_t *MSG, uint8_t len) {
  Serial1.write(MSG[i]);
  }
 }
+
+/**
+ * Waits for an acknowledgment from the GPS module in response to a UBX message.
+ * Validates the response by comparing it with the expected ACK packet.
+ *
+ * @param MSG  The UBX message for which to receive an ACK.
+ * @return     True if the ACK was received successfully, false otherwise.
+ */
 boolean getUBX_ACK(uint8_t *MSG) {
  uint8_t b;
  uint8_t ackByteID = 0;
